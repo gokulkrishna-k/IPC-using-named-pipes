@@ -1,9 +1,15 @@
+class Data
+{
+public:
+    string info;
+};
+
 class CustomNamedPipeClient
 {
 
     HANDLE customPipe;
 
-    LPTSTR pipeName = TEXT("\\\\.\\pipe\\mypipe");
+    LPTSTR pipeName;
 
     // WriteFile
     BOOL bWriteFile;
@@ -18,8 +24,10 @@ class CustomNamedPipeClient
     DWORD noBytesToRead;
 
 public:
-    CustomNamedPipeClient()
+    int OpenPipe(LPTSTR pName)
     {
+        pipeName = pName;
+
         customPipe = CreateFile(
             pipeName,
             GENERIC_READ | GENERIC_WRITE,
@@ -30,9 +38,25 @@ public:
             NULL);
 
         if (customPipe == INVALID_HANDLE_VALUE)
-            ShowMessage("File Creation Failed!\n", RED);
+        {
+            ShowMessage("Pipe Connection Attempt Failed!\n", RED);
+            return -1;
+        }
         else
-            ShowMessage("File Creation Success.\n", GREEN);
+        {
+            ShowMessage("Pipe Connection Success.\n", GREEN);
+            return 0;
+        }
+    }
+
+    void OpenServerConnection(LPTSTR pName)
+    {
+        while (OpenPipe(pName) != FALSE)
+        {
+            if (GetLastError() == ERROR_FILE_NOT_FOUND)
+                ShowMessage("Waiting for Server to Create Pipe...\n\n", YELLOW);
+            Sleep(5000);
+        }
     }
 
     ~CustomNamedPipeClient()
@@ -50,14 +74,27 @@ public:
             &noBytesToWrite,
             NULL);
 
-        if (bWriteFile == FALSE)
+        if (bWriteFile == FALSE && GetLastError() == ERROR_PIPE_NOT_CONNECTED)
         {
-            ShowMessage("Error : Message not sent!\n", RED);
+            ShowMessage("Error :Pipe Not Connected!\n", RED);
+            return -1;
+        }
+        else if (bWriteFile == FALSE && GetLastError() == ERROR_PIPE_BUSY)
+        {
+            ShowMessage("Error : Pipe Busy!\n", RED);
+            return -1;
+        }
+        else if (bWriteFile == FALSE && GetLastError() == ERROR_BROKEN_PIPE)
+        {
+            ShowMessage("Error : Broken Pipe\n", RED);
             return -1;
         }
         else
         {
             ShowMessage("Message Sent.\n", GREEN);
+            string temp(message);
+            if (temp == "ESC")
+                return 1;
             return 0;
         }
     }
@@ -72,15 +109,28 @@ public:
             &noBytesToRead,
             NULL);
 
-        if (bReadFile == FALSE)
+        if (bReadFile == FALSE && GetLastError() == ERROR_PIPE_NOT_CONNECTED)
         {
-            ShowMessage("Error : Message not received!\n", RED);
+            ShowMessage("Error :Pipe Not Connected!\n", RED);
+            return -1;
+        }
+        else if (bReadFile == FALSE && GetLastError() == ERROR_PIPE_BUSY)
+        {
+            ShowMessage("Error : Pipe Busy!\n", RED);
+            return -1;
+        }
+        else if (bReadFile == FALSE && GetLastError() == ERROR_BROKEN_PIPE)
+        {
+            ShowMessage("Error : Broken Pipe\n", RED);
             return -1;
         }
         else
         {
             ShowMessage("Message Received.\n", GREEN);
-            cout << "CLIENT -> " << readFileBuffer << endl;
+            string temp(readFileBuffer);
+            if (temp == "ESC")
+                return 1;
+            cout << "CLIENT -> " << temp << endl;
             return 0;
         }
     }

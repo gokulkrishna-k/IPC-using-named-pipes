@@ -1,10 +1,16 @@
+class Data
+{
+public:
+    string info;
+};
+
 class CustomNamedPipeServer
 {
 
     HANDLE customPipe;
-    LPTSTR pipeName = TEXT("\\\\.\\pipe\\mypipe");
+    LPTSTR pipeName;
     char inputBuffer[1023];
-    char outputBuffer[1023];
+    char outputBuffer;
     DWORD inputBufferSize = sizeof(inputBuffer);
     DWORD outputBufferSize = sizeof(outputBuffer);
 
@@ -26,16 +32,18 @@ class CustomNamedPipeServer
     DWORD noBytesToRead;
 
 public:
-    CustomNamedPipeServer()
+    CustomNamedPipeServer(LPTSTR pName, DWORD pAccessMode, DWORD pType, DWORD instance, DWORD timeout)
     {
+
+        pipeName = pName;
         customPipe = CreateNamedPipe(
             pipeName,
-            PIPE_ACCESS_DUPLEX,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-            PIPE_UNLIMITED_INSTANCES,
+            pAccessMode,
+            pType,
+            instance,
             inputBufferSize,
             outputBufferSize,
-            0,
+            timeout,
             NULL);
 
         if (customPipe == INVALID_HANDLE_VALUE)
@@ -46,22 +54,22 @@ public:
 
     ~CustomNamedPipeServer()
     {
+        cout << "Destroying Pipe..\n";
         CloseHandle(customPipe);
     }
 
-    int PipeConnect()
+    void PipeConnect()
     {
+        cout << "Waiting for client Connection...\n";
         bConnectNamedPipe = ConnectNamedPipe(customPipe, NULL);
 
         if (bConnectNamedPipe == FALSE)
         {
             ShowMessage("Error connection to the pipe!\n", RED);
-            return -1;
         }
         else
         {
             ShowMessage("Connection successful.\n", GREEN);
-            return 0;
         }
     }
 
@@ -75,31 +83,42 @@ public:
             &noBytesToWrite,
             NULL);
 
-        if (bWriteFile == FALSE)
+        if (bWriteFile == FALSE && GetLastError() == ERROR_PIPE_NOT_CONNECTED)
         {
-            ShowMessage("Error : Message not sent!\n", RED);
+            ShowMessage("Error :Pipe Not Connected!\n", RED);
+            return -1;
+        }
+        else if (bWriteFile == FALSE && GetLastError() == ERROR_PIPE_BUSY)
+        {
+            ShowMessage("Error : Pipe Busy!\n", RED);
+            return -1;
+        }
+        else if (bWriteFile == FALSE && GetLastError() == ERROR_BROKEN_PIPE)
+        {
+            ShowMessage("Error : Broken Pipe\n", RED);
             return -1;
         }
         else
         {
             ShowMessage("Message Sent.\n", GREEN);
+            string temp(message);
+            if (temp == "ESC")
+                return 1;
             return 0;
         }
     }
 
-    int FlushBuffer()
+    void FlushBuffer()
     {
         bFlushFileBuffer = FlushFileBuffers(customPipe);
 
         if (bFlushFileBuffer == FALSE)
         {
             ShowMessage("FlushFileBuffer failed!\n", RED);
-            return -1;
         }
         else
         {
             ShowMessage("FlushFileBuffer Successful.\n", GREEN);
-            return 0;
         }
     }
 
@@ -113,21 +132,54 @@ public:
             &noBytesToRead,
             NULL);
 
-        if (bReadFile == FALSE)
+        if (bReadFile == FALSE && GetLastError() == ERROR_PIPE_NOT_CONNECTED)
         {
-            ShowMessage("Error : Message not received!\n", RED);
+            ShowMessage("Error :Pipe Not Connected!\n", RED);
+            return -1;
+        }
+        else if (bReadFile == FALSE && GetLastError() == ERROR_PIPE_BUSY)
+        {
+            ShowMessage("Error : Pipe Busy!\n", RED);
+            return -1;
+        }
+        else if (bReadFile == FALSE && GetLastError() == ERROR_BROKEN_PIPE)
+        {
+            ShowMessage("Error : Broken Pipe\n", RED);
             return -1;
         }
         else
         {
             ShowMessage("Message Received.\n", GREEN);
-            cout << "CLIENT -> " << readFileBuffer << endl;
+            string temp(readFileBuffer);
+            if (temp == "ESC")
+                return 1;
+            cout << "CLIENT -> " << temp << endl;
             return 0;
         }
     }
 
     void disconnectPipe()
     {
+        cout << "Disconnecting Pipe...\n";
         DisconnectNamedPipe(customPipe);
     }
 };
+
+// void PipeListener()
+// {
+//     BOOL pipeState;
+
+//     while (1)
+//     {
+//         pipeState = GetNamedPipeHandleState(
+//             customPipe,
+//             NULL, NULL, NULL, NULL, NULL, NULL);
+
+//         if (GetLastError() == ERROR_PIPE_NOT_CONNECTED)
+//         {
+//             cout << "Client has disconnected!\n";
+//         }
+//         cout << "CLIENT OK\n";
+//         Sleep(3000);
+//     }
+// }
