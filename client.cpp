@@ -1,13 +1,13 @@
 #include <windows.h>
 #include <iostream>
 #include <thread>
-
+#include <stdlib.h>
+#define RETRY_LIMIT 5
 using namespace std;
 
 #include "util.h"
 #include "custom-named-pipe-client.h"
 
-char closeMessage[100] = "close";
 bool isRunning = true;
 
 void WriteHandler(CustomNamedPipeClient *clientRead, LPTSTR readPipeName, CustomNamedPipeClient *clientWrite, LPTSTR writePipeName)
@@ -50,7 +50,6 @@ void ReadHandler(CustomNamedPipeClient *clientRead, LPTSTR readPipeName, CustomN
 
     while (isRunning)
     {
-        cout << "Read..\n";
         response = clientRead->ReadFromPipe();
         if (!isRunning)
             return;
@@ -64,7 +63,9 @@ void ReadHandler(CustomNamedPipeClient *clientRead, LPTSTR readPipeName, CustomN
         {
             ShowMessage("Server initiated Shutdown.\n", GREEN);
             isRunning = false;
-            break;
+            // delete clientWrite;
+            // delete clientRead;
+            // exit(0);
         }
         else
         {
@@ -83,19 +84,30 @@ int main()
     LPTSTR writePipeName = TEXT("\\\\.\\pipe\\mypipe1");
     LPTSTR readPipeName = TEXT("\\\\.\\pipe\\mypipe2");
 
-    clientRead->OpenServerConnection(readPipeName, GENERIC_READ);
-    Sleep(500);
-    clientWrite->OpenServerConnection(writePipeName, GENERIC_WRITE);
+    BOOL connection;
 
-    thread readThread(ReadHandler, clientRead, readPipeName, clientWrite, writePipeName);
-    thread writeThread(WriteHandler, clientRead, readPipeName, clientWrite, writePipeName);
+    connection = clientRead->OpenServerConnection(readPipeName, GENERIC_READ);
+    Sleep(100);
+    if (connection != FALSE)
+        clientWrite->OpenServerConnection(writePipeName, GENERIC_WRITE);
 
-    readThread.join();
-    writeThread.join();
+    if (connection != FALSE)
+    {
+        thread readThread(ReadHandler, clientRead, readPipeName, clientWrite, writePipeName);
+        thread writeThread(WriteHandler, clientRead, readPipeName, clientWrite, writePipeName);
 
-    delete clientWrite;
-    delete clientRead;
+        readThread.join();
+        writeThread.join();
 
-    cout << "\nClient Ended\n";
+        delete clientWrite;
+        delete clientRead;
+
+        cout << "\nClient Ended\n";
+    }
+    else
+    {
+        cout << "Client ended due to Timeout!\n";
+    }
+
     return 0;
 }

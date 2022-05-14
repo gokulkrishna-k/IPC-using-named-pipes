@@ -1,7 +1,8 @@
 #include <iostream>
 #include <Windows.h>
 #include <thread>
-
+#define PIPE_TIMEOUT_CONNECT 5000
+#define RETRY_LIMIT 5
 using namespace std;
 
 #include "util.h"
@@ -16,20 +17,29 @@ void WriteHandler(CustomNamedPipeServer *serverRead, CustomNamedPipeServer *serv
     {
         char message[1023];
         cin.getline(message, 1023); // user inputs message...
-
-        response = serverWrite->WriteToPipe(message);
         if (!isRunning)
             return;
-        if (response == ERROR_BROKEN_PIPE || response == ERROR_PIPE_NOT_CONNECTED)
+        response = serverWrite->WriteToPipe(message);
+
+        if (response == -1 || response == ERROR_BROKEN_PIPE || response == ERROR_PIPE_NOT_CONNECTED)
         {
-            ShowMessage("Error , Trying to Reconnect...", RED);
+            ShowMessage("Error , Trying to Reconnect...\n", RED);
 
             serverWrite->disconnectPipe();
             serverRead->disconnectPipe();
 
-            serverWrite->PipeConnect();
-            serverRead->PipeConnect();
+            BOOL connection;
 
+            connection = serverWrite->PipeConnect();
+            if (connection != FALSE)
+            {
+                connection = serverRead->PipeConnect();
+            }
+            if (connection == FALSE)
+            {
+                isRunning = false;
+                return;
+            }
             continue;
         }
         else if (response == 1)
@@ -38,12 +48,11 @@ void WriteHandler(CustomNamedPipeServer *serverRead, CustomNamedPipeServer *serv
             isRunning = false;
             return;
         }
-        else
+        else if (response == 0)
         {
             ShowMessage("Message Sent.\n", GREEN);
+            serverWrite->FlushBuffer();
         }
-
-        serverWrite->FlushBuffer();
     }
 }
 
@@ -53,65 +62,98 @@ void ReadHandler(CustomNamedPipeServer *serverRead, CustomNamedPipeServer *serve
     while (isRunning)
     {
         response = serverRead->ReadFromPipe();
-        if (!isRunning)
-            return;
-        if (response == ERROR_BROKEN_PIPE || response == ERROR_PIPE_NOT_CONNECTED)
+        if (isRunning)
         {
-            ShowMessage("Trying to Reconnect...\n", RED);
-        }
-        else if (response == 1)
-        {
-            cout << "Client has shutdown!  Waiting for new client...\n";
-        }
-        else if (response == 0)
-        {
-            ShowMessage("Message Received.\n", GREEN);
-            continue;
+            if (response == 0)
+            {
+                ShowMessage("Message Received.\n", GREEN);
+                Sleep(500);
+                continue;
+            }
+            else
+            {
+                if (response == ERROR_BROKEN_PIPE || response == ERROR_PIPE_NOT_CONNECTED)
+                {
+                    ShowMessage("Trying to Reconnect...\n", RED);
+                }
+                else if (response == 1)
+                {
+                    cout << "Client has shutdown!  Waiting for new client...\n";
+                }
+                else
+                {
+                    cout << "Error in client!\nTrying to reconnect...\n";
+                }
+                serverRead->disconnectPipe();
+                serverWrite->disconnectPipe();
+
+                BOOL connection;
+                connection = serverWrite->PipeConnect();
+                if (connection != FALSE)
+                {
+                    connection = serverRead->PipeConnect();
+                }
+                if (connection == FALSE)
+                {
+                    isRunning = false;
+                    cin.ignore();
+                    return;
+                }
+            }
         }
         else
         {
-            cout << "Error in client!\nTrying to reconnect...\n";
+            cout << "Return;";
+            return;
         }
-        serverRead->disconnectPipe();
-        serverWrite->disconnectPipe();
-
-        serverWrite->PipeConnect();
-        serverRead->PipeConnect();
+        Sleep(500);
     }
 }
 
 int main()
 {
-
     cout << "---- SERVER ----\n\n";
 
     CustomNamedPipeServer *serverRead = new CustomNamedPipeServer(
         TEXT("\\\\.\\pipe\\mypipe1"),
-        PIPE_ACCESS_INBOUND,
+        PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
         PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
         PIPE_UNLIMITED_INSTANCES, 5000);
 
     CustomNamedPipeServer *serverWrite = new CustomNamedPipeServer(
         TEXT("\\\\.\\pipe\\mypipe2"),
-        PIPE_ACCESS_OUTBOUND,
+        PIPE_ACCESS_OUTBOUND | FILE_FLAG_OVERLAPPED,
         PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
         PIPE_UNLIMITED_INSTANCES, 5000);
 
-    serverWrite->PipeConnect();
-    serverRead->PipeConnect();
+    BOOL connection;
 
-    thread writeThread(WriteHandler, serverRead, serverWrite);
-    thread readThread(ReadHandler, serverRead, serverWrite);
+    connection = serverWrite->PipeConnect();
+    if (connection != FALSE)
+    {
+        connection = serverRead->PipeConnect();
+    }
 
-    writeThread.join();
-    readThread.join();
+    if (connection != FALSE)
+    {
+        thread writeThread(WriteHandler, serverRead, serverWrite);
+        thread readThread(ReadHandler, serverRead, serverWrite);
 
-    serverWrite->disconnectPipe();
-    serverRead->disconnectPipe();
+        writeThread.join();
+        readThread.join();
 
-    delete serverWrite;
-    delete serverRead;
+        // force quit
+        serverWrite->disconnectPipe();
+        serverRead->disconnectPipe();
 
-    cout << "Server Ended\n";
+        delete serverWrite;
+        delete serverRead;
+
+        cout << "Server Ended\n";
+    }
+    else
+    {
+        cout << "Server has shutdown due to timeout\n";
+    }
     return 1;
 }

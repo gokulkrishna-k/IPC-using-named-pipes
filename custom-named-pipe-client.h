@@ -18,44 +18,35 @@ class CustomNamedPipeClient
     DWORD noBytesToRead;
 
 public:
-    int OpenPipe(LPTSTR pName, DWORD openMode)
+    BOOL OpenServerConnection(LPTSTR pName, DWORD openMode)
     {
-        pipeName = pName;
-        customPipe = CreateFile(
-            pipeName,
-            openMode, 0,
-            NULL,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            NULL);
-        cout << "OpenPipe : " << GetLastError() << endl;
-        if (customPipe == INVALID_HANDLE_VALUE)
+        for (int i = 0; i < RETRY_LIMIT; i++)
         {
-            ShowMessage("Pipe Connection Attempt Failed!\n", RED);
-            return FALSE;
-        }
-        else
-        {
-
-            ShowMessage("Pipe Connection Success.\n", GREEN);
-            return TRUE;
-        }
-    }
-
-    void OpenServerConnection(LPTSTR pName, DWORD openMode)
-    {
-        while (1)
-        {
-            BOOL res = OpenPipe(pName, openMode);
-
-            if (res == TRUE)
-                return;
-            if (GetLastError() == ERROR_FILE_NOT_FOUND)
+            pipeName = pName;
+            customPipe = CreateFile(
+                pipeName,
+                openMode, 0,
+                NULL,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                NULL);
+            if (customPipe == INVALID_HANDLE_VALUE)
             {
-                ShowMessage("Waiting for Server to Create Pipe...\n\n", YELLOW);
+                ShowMessage("Pipe Connection Attempt Failed!\n", RED);
+                if (GetLastError() == ERROR_FILE_NOT_FOUND)
+                {
+                    ShowMessage("Waiting for Server to Create Pipe...\n\n", YELLOW);
+                }
+            }
+            else
+            {
+                ShowMessage("Pipe Connection Success.\n", GREEN);
+                return TRUE;
             }
             Sleep(1000);
         }
+
+        return FALSE;
     }
 
     ~CustomNamedPipeClient()
@@ -67,7 +58,7 @@ public:
     DWORD WriteToPipe(char message[])
     {
 
-        while (1)
+        for (int i = 0; i < RETRY_LIMIT; i++)
         {
             bWriteFile = WriteFile(
                 customPipe,
@@ -105,7 +96,7 @@ public:
     DWORD ReadFromPipe()
     {
 
-        while (1)
+        for (int i = 0; i < RETRY_LIMIT; i++)
         {
             bReadFile = ReadFile(
                 customPipe,
@@ -132,7 +123,6 @@ public:
             }
             else
             {
-
                 string temp(readFileBuffer);
                 cout << "CLIENT -> " << temp << endl;
                 if (temp == "ESC")

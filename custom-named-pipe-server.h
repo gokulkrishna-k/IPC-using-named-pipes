@@ -29,7 +29,7 @@ public:
     {
 
         pipeName = pName;
-        while (1)
+        for (int i = 0; i < RETRY_LIMIT; i++)
         {
             customPipe = CreateNamedPipe(
                 pipeName,
@@ -60,31 +60,61 @@ public:
     {
         cout << "Waiting for client Connection...\n";
 
-        while (1)
-        {
-            bConnectNamedPipe = ConnectNamedPipe(customPipe, NULL);
+        OVERLAPPED ol = {0, 0, 0, 0, NULL};
+        BOOL ret = 0;
 
-            if (bConnectNamedPipe == FALSE && GetLastError() == ERROR_PIPE_LISTENING)
+        ol.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+
+        ret = ConnectNamedPipe(customPipe, &ol);
+
+        if (ret == FALSE)
+        {
+
+            switch (GetLastError())
             {
-                ShowMessage("Pipe Connect : Waiting for process to open other end of pipe!\n", RED);
-            }
-            else if (bConnectNamedPipe == FALSE && GetLastError() == ERROR_PIPE_CONNECTED)
+            case ERROR_PIPE_CONNECTED:
             {
-                ShowMessage("Pipe Connect : ERROR_PIPE_CONNECTED\n", RED);
+                ret = TRUE;
+                ShowMessage("Pipe Connect : Already Connected.\n", GREEN);
+                break;
             }
-            else if (bConnectNamedPipe == TRUE)
+
+            case ERROR_IO_PENDING:
             {
-                ShowMessage("Pipe Connect : Connection successful.\n", GREEN);
-                return TRUE;
+                cout << "CONNECTION PENDING\n";
+                if (WaitForSingleObject(ol.hEvent, PIPE_TIMEOUT_CONNECT) == WAIT_OBJECT_0)
+                {
+                    DWORD dwIgnore;
+                    ret = GetOverlappedResult(customPipe, &ol, &dwIgnore, FALSE);
+                }
+                else
+                {
+                    ShowMessage("Pipe Connect : CancelIO\n", YELLOW);
+                    CancelIo(customPipe);
+                }
+                break;
             }
-            Sleep(1000);
+            }
+        }
+        if (ret == TRUE)
+        {
+            ShowMessage("Pipe Connect : Connection successful.\n", GREEN);
+            CloseHandle(ol.hEvent);
+            return TRUE;
+        }
+        if (ret == FALSE)
+        {
+            ShowMessage("Pipe Connect : Timeout\n", YELLOW);
+            disconnectPipe();
+            CloseHandle(customPipe);
+            return FALSE;
         }
     }
 
     DWORD WriteToPipe(char message[])
     {
 
-        while (1)
+        for (int i = 0; i < RETRY_LIMIT; i++)
         {
             bWriteFile = WriteFile(
                 customPipe,
@@ -109,7 +139,7 @@ public:
                 ShowMessage("Write Error : Broken Pipe\n", RED);
                 return ERROR_BROKEN_PIPE;
             }
-            else
+            else if (bWriteFile == TRUE)
             {
                 string temp(message);
                 if (temp == "ESC")
@@ -117,12 +147,14 @@ public:
                 return 0;
             }
         }
+
+        return -1;
     }
 
     DWORD ReadFromPipe()
     {
 
-        while (1)
+        for (int i = 0; i < RETRY_LIMIT; i++)
         {
             bReadFile = ReadFile(
                 customPipe,
@@ -139,6 +171,7 @@ public:
             else if (bReadFile == FALSE && GetLastError() == ERROR_PIPE_BUSY)
             {
                 ShowMessage("Read Error : Pipe Busy!\n", RED);
+                Sleep(500);
                 continue;
             }
             else if (bReadFile == FALSE && GetLastError() == ERROR_BROKEN_PIPE)
@@ -146,7 +179,7 @@ public:
                 ShowMessage("Read Error : Broken Pipe\n", RED);
                 return ERROR_BROKEN_PIPE;
             }
-            else
+            else if (bReadFile == TRUE)
             {
                 string temp(readFileBuffer);
                 cout << "CLIENT -> " << temp << endl;
@@ -173,6 +206,7 @@ public:
 
     void disconnectPipe()
     {
+        cout << "Disconnected.\n";
         DisconnectNamedPipe(customPipe);
     }
 };
