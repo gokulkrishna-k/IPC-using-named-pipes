@@ -1,7 +1,7 @@
 #include <iostream>
 #include <Windows.h>
 #include <thread>
-#define PIPE_TIMEOUT_CONNECT 5000
+#define PIPE_TIMEOUT_CONNECT 10000
 #define RETRY_LIMIT 5
 using namespace std;
 
@@ -101,12 +101,6 @@ void ReadHandler(CustomNamedPipeServer *serverRead, CustomNamedPipeServer *serve
                 }
             }
         }
-        else
-        {
-            cout << "Return;";
-            return;
-        }
-        Sleep(500);
     }
 }
 

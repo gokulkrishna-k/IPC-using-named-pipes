@@ -20,10 +20,9 @@ void WriteHandler(CustomNamedPipeClient *clientRead, LPTSTR readPipeName, Custom
 
         char message[1023];
         cin.getline(message, 1023);
-
-        response = clientWrite->WriteToPipe(message);
         if (!isRunning)
             return;
+        response = clientWrite->WriteToPipe(message);
         if (response == ERROR_BROKEN_PIPE || response == ERROR_PIPE_NOT_CONNECTED)
         {
             ShowMessage("Error , Trying to Reconnect...", RED);
@@ -63,9 +62,9 @@ void ReadHandler(CustomNamedPipeClient *clientRead, LPTSTR readPipeName, CustomN
         {
             ShowMessage("Server initiated Shutdown.\n", GREEN);
             isRunning = false;
-            // delete clientWrite;
-            // delete clientRead;
-            // exit(0);
+            delete clientWrite;
+            delete clientRead;
+            exit(0);
         }
         else
         {

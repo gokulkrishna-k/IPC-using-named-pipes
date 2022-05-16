@@ -1,7 +1,8 @@
-class CustomNamedPipeServer
+
+#include "custom-named-pipe.h"
+class CustomNamedPipeServer : public CustomNamedPipe
 {
 
-    HANDLE customPipe;
     LPTSTR pipeName;
 
     DWORD inputBufferSize = 1023;
@@ -9,20 +10,8 @@ class CustomNamedPipeServer
 
     BOOL bConnectNamedPipe;
 
-    // WriteFile
-    BOOL bWriteFile;
-    char writeFileBuffer[1023];
-    DWORD writeFileBufferSize = sizeof(writeFileBuffer);
-    DWORD noBytesToWrite;
-
     // Flush Buffer
     BOOL bFlushFileBuffer;
-
-    // Read File Variables
-    BOOL bReadFile;
-    char readFileBuffer[1023];
-    DWORD readFileBufferSize = sizeof(readFileBuffer);
-    DWORD noBytesToRead;
 
 public:
     CustomNamedPipeServer(LPTSTR pName, DWORD pAccessMode, DWORD pType, DWORD instance, DWORD timeout)
@@ -108,85 +97,6 @@ public:
             disconnectPipe();
             CloseHandle(customPipe);
             return FALSE;
-        }
-    }
-
-    DWORD WriteToPipe(char message[])
-    {
-
-        for (int i = 0; i < RETRY_LIMIT; i++)
-        {
-            bWriteFile = WriteFile(
-                customPipe,
-                message,
-                writeFileBufferSize,
-                &noBytesToWrite,
-                NULL);
-
-            if (bWriteFile == FALSE && GetLastError() == ERROR_PIPE_NOT_CONNECTED)
-            {
-                ShowMessage("Write Error :Pipe Not Connected!\n", RED);
-                return ERROR_PIPE_NOT_CONNECTED;
-            }
-            else if (bWriteFile == FALSE && GetLastError() == ERROR_PIPE_BUSY)
-            {
-                ShowMessage("Write Error : Pipe Busy!\n", RED);
-                Sleep(1000);
-                continue;
-            }
-            else if (bWriteFile == FALSE && GetLastError() == ERROR_BROKEN_PIPE)
-            {
-                ShowMessage("Write Error : Broken Pipe\n", RED);
-                return ERROR_BROKEN_PIPE;
-            }
-            else if (bWriteFile == TRUE)
-            {
-                string temp(message);
-                if (temp == "ESC")
-                    return 1;
-                return 0;
-            }
-        }
-
-        return -1;
-    }
-
-    DWORD ReadFromPipe()
-    {
-
-        for (int i = 0; i < RETRY_LIMIT; i++)
-        {
-            bReadFile = ReadFile(
-                customPipe,
-                readFileBuffer,
-                readFileBufferSize,
-                &noBytesToRead,
-                NULL);
-
-            if (bReadFile == FALSE && GetLastError() == ERROR_PIPE_NOT_CONNECTED)
-            {
-                ShowMessage("Read Error :Pipe Not Connected!\n", RED);
-                return ERROR_PIPE_NOT_CONNECTED;
-            }
-            else if (bReadFile == FALSE && GetLastError() == ERROR_PIPE_BUSY)
-            {
-                ShowMessage("Read Error : Pipe Busy!\n", RED);
-                Sleep(500);
-                continue;
-            }
-            else if (bReadFile == FALSE && GetLastError() == ERROR_BROKEN_PIPE)
-            {
-                ShowMessage("Read Error : Broken Pipe\n", RED);
-                return ERROR_BROKEN_PIPE;
-            }
-            else if (bReadFile == TRUE)
-            {
-                string temp(readFileBuffer);
-                cout << "CLIENT -> " << temp << endl;
-                if (temp == "ESC")
-                    return 1;
-                return 0;
-            }
         }
     }
 
