@@ -4,13 +4,13 @@ protected:
     HANDLE customPipe;
     // WriteFile
     BOOL bWriteFile;
-    char writeFileBuffer[1023];
+    char writeFileBuffer[BUFF_SIZE];
     DWORD writeFileBufferSize = sizeof(writeFileBuffer);
     DWORD noBytesToWrite;
 
     // Read File Variables
     BOOL bReadFile;
-    char readFileBuffer[1023];
+    char readFileBuffer[BUFF_SIZE];
     DWORD readFileBufferSize = sizeof(readFileBuffer);
     DWORD noBytesToRead;
 
@@ -91,5 +91,6 @@ public:
                 return 0;
             }
         }
+        return -1;
     }
 };

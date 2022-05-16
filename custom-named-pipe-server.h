@@ -5,12 +5,11 @@ class CustomNamedPipeServer : public CustomNamedPipe
 
     LPTSTR pipeName;
 
-    DWORD inputBufferSize = 1023;
-    DWORD outputBufferSize = 1023;
+    DWORD inputBufferSize = BUFF_SIZE;
+    DWORD outputBufferSize = BUFF_SIZE;
 
     BOOL bConnectNamedPipe;
 
-    // Flush Buffer
     BOOL bFlushFileBuffer;
 
 public:
@@ -52,7 +51,7 @@ public:
         OVERLAPPED ol = {0, 0, 0, 0, NULL};
         BOOL ret = 0;
 
-        ol.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+        ol.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 
         ret = ConnectNamedPipe(customPipe, &ol);
 

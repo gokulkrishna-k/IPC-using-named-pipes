@@ -2,10 +2,11 @@
 #include <iostream>
 #include <thread>
 #include <stdlib.h>
-#define RETRY_LIMIT 5
 using namespace std;
-
+#define RETRY_LIMIT 5
+#define BUFF_SIZE 1023
 #include "util.h"
+
 #include "custom-named-pipe-client.h"
 
 bool isRunning = true;
@@ -18,16 +19,32 @@ void WriteHandler(CustomNamedPipeClient *clientRead, LPTSTR readPipeName, Custom
     while (isRunning)
     {
 
-        char message[1023];
-        cin.getline(message, 1023);
+        char message[BUFF_SIZE];
+
+        cin.getline(message, BUFF_SIZE);
+        cin.clear();
+        cin.ignore(INT_MAX, '\n');
+
         if (!isRunning)
             return;
         response = clientWrite->WriteToPipe(message);
         if (response == ERROR_BROKEN_PIPE || response == ERROR_PIPE_NOT_CONNECTED)
         {
             ShowMessage("Error , Trying to Reconnect...", RED);
-            clientWrite->OpenServerConnection(writePipeName, GENERIC_WRITE);
-            clientRead->OpenServerConnection(readPipeName, GENERIC_READ);
+            BOOL connection = clientRead->OpenServerConnection(readPipeName, GENERIC_READ);
+            Sleep(100);
+            if (connection != FALSE)
+                clientWrite->OpenServerConnection(writePipeName, GENERIC_WRITE);
+
+            if (connection == FALSE)
+            {
+                ShowMessage("Reconnection Failed. Closing Client\n", GREEN);
+                isRunning = false;
+                // using exit to force quit the blocking cin
+                delete clientWrite;
+                delete clientRead;
+                exit(0);
+            }
             continue;
         }
         else if (response == 1)
@@ -55,13 +72,28 @@ void ReadHandler(CustomNamedPipeClient *clientRead, LPTSTR readPipeName, CustomN
         if (response == ERROR_BROKEN_PIPE || response == ERROR_PIPE_NOT_CONNECTED)
         {
             cout << "Error in accessing server!\nTrying to reconnect...\n";
-            clientRead->OpenServerConnection(readPipeName, GENERIC_READ);
-            clientWrite->OpenServerConnection(writePipeName, GENERIC_WRITE);
+            BOOL connection;
+
+            connection = clientRead->OpenServerConnection(readPipeName, GENERIC_READ);
+            Sleep(100);
+            if (connection != FALSE)
+                clientWrite->OpenServerConnection(writePipeName, GENERIC_WRITE);
+
+            if (connection == FALSE)
+            {
+                ShowMessage("Reconnection Failed. Closing Client\n", GREEN);
+                isRunning = false;
+                // using exit to force quit the blocking cin
+                delete clientWrite;
+                delete clientRead;
+                exit(0);
+            }
         }
         else if (response == 1)
         {
             ShowMessage("Server initiated Shutdown.\n", GREEN);
             isRunning = false;
+            // using exit to force quit the blocking cin
             delete clientWrite;
             delete clientRead;
             exit(0);
@@ -75,6 +107,8 @@ void ReadHandler(CustomNamedPipeClient *clientRead, LPTSTR readPipeName, CustomN
 
 int main()
 {
+
+    system("CLS");
     cout << "---- CLIENT ----\n\n";
 
     CustomNamedPipeClient *clientRead = new CustomNamedPipeClient();

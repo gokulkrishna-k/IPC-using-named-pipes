@@ -1,10 +1,10 @@
 #include <iostream>
 #include <Windows.h>
 #include <thread>
-#define PIPE_TIMEOUT_CONNECT 10000
-#define RETRY_LIMIT 5
 using namespace std;
-
+#define PIPE_TIMEOUT_CONNECT 5000
+#define RETRY_LIMIT 5
+#define BUFF_SIZE 1023
 #include "util.h"
 #include "custom-named-pipe-server.h"
 
@@ -15,8 +15,12 @@ void WriteHandler(CustomNamedPipeServer *serverRead, CustomNamedPipeServer *serv
     int response;
     while (isRunning)
     {
-        char message[1023];
-        cin.getline(message, 1023); // user inputs message...
+        char message[BUFF_SIZE];
+
+        cin.getline(message, BUFF_SIZE);
+        cin.clear();
+        cin.ignore(INT_MAX, '\n');
+
         if (!isRunning)
             return;
         response = serverWrite->WriteToPipe(message);
@@ -62,43 +66,45 @@ void ReadHandler(CustomNamedPipeServer *serverRead, CustomNamedPipeServer *serve
     while (isRunning)
     {
         response = serverRead->ReadFromPipe();
-        if (isRunning)
-        {
-            if (response == 0)
-            {
-                ShowMessage("Message Received.\n", GREEN);
-                Sleep(500);
-                continue;
-            }
-            else
-            {
-                if (response == ERROR_BROKEN_PIPE || response == ERROR_PIPE_NOT_CONNECTED)
-                {
-                    ShowMessage("Trying to Reconnect...\n", RED);
-                }
-                else if (response == 1)
-                {
-                    cout << "Client has shutdown!  Waiting for new client...\n";
-                }
-                else
-                {
-                    cout << "Error in client!\nTrying to reconnect...\n";
-                }
-                serverRead->disconnectPipe();
-                serverWrite->disconnectPipe();
 
-                BOOL connection;
-                connection = serverWrite->PipeConnect();
-                if (connection != FALSE)
-                {
-                    connection = serverRead->PipeConnect();
-                }
-                if (connection == FALSE)
-                {
-                    isRunning = false;
-                    cin.ignore();
-                    return;
-                }
+        if (!isRunning)
+            return;
+
+        if (response == 0)
+        {
+            ShowMessage("Message Received.\n", GREEN);
+            continue;
+        }
+        else if (response == 1)
+        {
+            cout << "Client has shutdown!\n";
+            serverRead->disconnectPipe();
+            serverWrite->disconnectPipe();
+            isRunning = false;
+
+            // using exit to force quit the blocking cin
+            delete serverWrite;
+            delete serverRead;
+
+            cout << "Server Ended.";
+            exit(1);
+        }
+        else if (response == ERROR_BROKEN_PIPE || response == ERROR_PIPE_NOT_CONNECTED)
+        {
+            ShowMessage("Trying to Reconnect...\n", RED);
+            serverRead->disconnectPipe();
+            serverWrite->disconnectPipe();
+
+            BOOL connection;
+            connection = serverWrite->PipeConnect();
+            if (connection != FALSE)
+            {
+                connection = serverRead->PipeConnect();
+            }
+            if (connection == FALSE)
+            {
+                isRunning = false;
+                return;
             }
         }
     }
@@ -106,6 +112,8 @@ void ReadHandler(CustomNamedPipeServer *serverRead, CustomNamedPipeServer *serve
 
 int main()
 {
+
+    system("CLS");
     cout << "---- SERVER ----\n\n";
 
     CustomNamedPipeServer *serverRead = new CustomNamedPipeServer(
@@ -123,6 +131,7 @@ int main()
     BOOL connection;
 
     connection = serverWrite->PipeConnect();
+
     if (connection != FALSE)
     {
         connection = serverRead->PipeConnect();
@@ -136,7 +145,6 @@ int main()
         writeThread.join();
         readThread.join();
 
-        // force quit
         serverWrite->disconnectPipe();
         serverRead->disconnectPipe();
 
